@@ -1,6 +1,8 @@
 import * as THREE from '../build/three.module.js';
 
 import Stats from './jsm/libs/stats.module.js';
+import Dat from './jsm/libs/dat.gui.module.js';
+
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 
 import { Curves } from './jsm/curves/CurveExtras.js';
@@ -34,10 +36,41 @@ let KleinFigure = (v, u,  target) => {
 
 export const DrawPlot = (containerId) => {
 
-    let camera, scene, renderer, stats, controls;
+    let camera, scene, renderer, stats, controls, folder, guiControls;
 
     init();
     //animate();
+
+    function init() {
+
+        createScene();
+        createCamera();
+        createFigure();
+        createRenderer();
+        addGui();
+
+        // Add GUI
+
+        function addGui() {
+            const datGui  = new Dat.GUI({ autoPlace: true });
+
+            datGui.domElement.id = 'gui';
+
+            folder = datGui.addFolder(`Cube`);
+            //datGui.add(guiControls, 'asasa', 0, 0.12)
+
+
+        }
+
+        // Add controls
+        controls = new OrbitControls( camera, renderer.domElement );
+
+        // Add statistics of FPS and Ping
+        stats = new Stats();
+        container.appendChild(stats.dom);
+
+        window.addEventListener('resize', onWindowResize, false);
+    }
 
     function createScene() {
         scene = new THREE.Scene();
@@ -73,7 +106,7 @@ export const DrawPlot = (containerId) => {
         let geometry = new THREE.ParametricBufferGeometry(KleinFigure, 15, 15);
         let object = new THREE.Mesh(geometry, material);
         object.position.set(0, 100, 200);
-        object.scale.multiplyScalar(10);
+        object.scale.multiplyScalar(20);
 
         scene.add(object);
     }
@@ -88,30 +121,10 @@ export const DrawPlot = (containerId) => {
         container.appendChild(renderer.domElement);
     }
 
-    function init() {
-
-        createScene();
-        createCamera();
-        createFigure();
-        createRenderer();
-
-        // Add controls
-        controls = new OrbitControls( camera, renderer.domElement );
-
-        // Add statistics of FPS and Ping
-        stats = new Stats();
-        container.appendChild(stats.dom);
-
-        window.addEventListener('resize', onWindowResize, false);
-    }
-
     function onWindowResize() {
-
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
-
         renderer.setSize(window.innerWidth, window.innerHeight);
-
     }
 
     function animationLoop() {
