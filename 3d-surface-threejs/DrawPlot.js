@@ -37,35 +37,36 @@ export const DrawPlot = (containerId) => {
     let camera, scene, renderer, stats, controls;
 
     init();
-    animate();
+    //animate();
 
-    function init() {
+    function createScene() {
+        scene = new THREE.Scene();
 
-        const container = document.getElementById(containerId);
+        // Set the background color
+        scene.background = new THREE.Color('black');
 
+        // Create Light
+        const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
+        scene.add(ambientLight);
+    }
+
+    function createCamera() {
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
         camera.position.y = 400;
 
-        scene = new THREE.Scene();// Set the background color
-        scene.background = new THREE.Color('black');
-
-        //
-
-        const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
-        scene.add(ambientLight);
-
         const pointLight = new THREE.PointLight(0xffffff, 0.8);
         camera.add(pointLight);
+
         scene.add(camera);
+    }
 
-        //
-
+    function createFigure() {
         const map = new THREE.TextureLoader().load('index.png');
         map.wrapS = map.wrapT = THREE.RepeatWrapping;
         map.anisotropy = 16;
 
         //const material = new THREE.MeshPhongMaterial({ map: map, side: THREE.DoubleSide });
-        const material = new THREE.MeshBasicMaterial({wireframeLinewidth: 1, wireframe: true});
+        const material = new THREE.MeshBasicMaterial({ wireframeLinewidth: 1, wireframe: true });
 
         //
 
@@ -73,26 +74,35 @@ export const DrawPlot = (containerId) => {
         let object = new THREE.Mesh(geometry, material);
         object.position.set(0, 100, 200);
         object.scale.multiplyScalar(10);
+
         scene.add(object);
+    }
 
-        //
-
+    function createRenderer() {
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setAnimationLoop(animationLoop);
+
+        const container = document.getElementById(containerId);
         container.appendChild(renderer.domElement);
+    }
 
-        //
+    function init() {
+
+        createScene();
+        createCamera();
+        createFigure();
+        createRenderer();
+
+        // Add controls
         controls = new OrbitControls( camera, renderer.domElement );
-
 
         // Add statistics of FPS and Ping
         stats = new Stats();
         container.appendChild(stats.dom);
 
         window.addEventListener('resize', onWindowResize, false);
-
     }
 
     function onWindowResize() {
