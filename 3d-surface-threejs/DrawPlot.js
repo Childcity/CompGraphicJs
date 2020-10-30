@@ -5,12 +5,11 @@ import Dat from './jsm/libs/dat.gui.module.js';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 
-import { Curves } from './jsm/curves/CurveExtras.js';
 import { ParametricGeometries } from './jsm/geometries/ParametricGeometries.js';
 
 
 // target: THREE.Vector3
-let KleinFigure = (v, u,  target) => {
+const KleinFigure = (v, u, target) => {
 
     u *= 2 * Math.PI;
     v *= 2 * Math.PI;
@@ -31,39 +30,36 @@ let KleinFigure = (v, u,  target) => {
     y = - 2 * (1 - Math.cos(u) / 2) * Math.sin(v);
 
     target.set(x, y, z);
-
 };
 
 export const DrawPlot = (containerId) => {
 
-    let camera, scene, renderer, stats, controls, folder, guiControls;
+    let camera, scene, figure, renderer,
+        stats, controls,
+        datGui;
+
+    let options = {
+        isWireframe: true,
+        isAnimation: true,
+        geometry: {
+            slices: 15,
+            stacks: 15
+        }
+    }
 
     init();
-    //animate();
+    //animationLoop();
 
     function init() {
 
         createScene();
         createCamera();
         createFigure();
+        createGui();
         createRenderer();
-        addGui();
-
-        // Add GUI
-
-        function addGui() {
-            const datGui  = new Dat.GUI({ autoPlace: true });
-
-            datGui.domElement.id = 'gui';
-
-            folder = datGui.addFolder(`Cube`);
-            //datGui.add(guiControls, 'asasa', 0, 0.12)
-
-
-        }
 
         // Add controls
-        controls = new OrbitControls( camera, renderer.domElement );
+        controls = new OrbitControls(camera, renderer.domElement);
 
         // Add statistics of FPS and Ping
         stats = new Stats();
@@ -96,19 +92,68 @@ export const DrawPlot = (containerId) => {
     function createFigure() {
         const map = new THREE.TextureLoader().load('index.png');
         map.wrapS = map.wrapT = THREE.RepeatWrapping;
-        map.anisotropy = 16;
+        map.anisotropy = 4;
 
-        //const material = new THREE.MeshPhongMaterial({ map: map, side: THREE.DoubleSide });
-        const material = new THREE.MeshBasicMaterial({ wireframeLinewidth: 1, wireframe: true });
+        const material = new THREE.MeshPhongMaterial({ map: map, side: THREE.DoubleSide, wireframe: options.isWireframe });
+        //const material = new THREE.MeshBasicMaterial({ wireframeLinewidth: 1, wireframe: true });
 
-        //
+        const geometry = new THREE.ParametricBufferGeometry(KleinFigure, 
+            options.geometry.slices,
+            options.geometry.stacks);
 
-        let geometry = new THREE.ParametricBufferGeometry(KleinFigure, 15, 15);
-        let object = new THREE.Mesh(geometry, material);
-        object.position.set(0, 100, 200);
-        object.scale.multiplyScalar(20);
+        figure = new THREE.Mesh(geometry, material);
+        figure.position.set(0, 100, 200);
+        figure.scale.multiplyScalar(20);
+        figure.name = 'Klein'
 
-        scene.add(object);
+        const removeObjectIfExist = (objName) => {
+            const selectedObject = scene.getObjectByName(objName);
+            if (selectedObject) {
+                scene.remove(selectedObject);
+            }
+        }
+
+        removeObjectIfExist(figure.name);
+        scene.add(figure);
+    }
+
+    function createGui() {
+        datGui = new Dat.GUI({ autoPlace: true });
+        datGui.domElement.id = 'gui';
+
+        // Create folder and Add Options 
+        const fig = datGui.addFolder('Figure');
+
+        fig.add(options, 'isWireframe').onChange((newVal) => {
+            figure.material.wireframe = newVal
+            requestAnimationFrame(animationLoop);
+        });
+
+        fig.add(options, 'isAnimation').onChange((isAnimation) => {
+            if (isAnimation) {
+                renderer.setAnimationLoop(animationLoop);
+                controls.removeEventListener('change', null);
+            } else {
+                renderer.setAnimationLoop(null);
+                controls.addEventListener('change', render);
+            }
+            requestAnimationFrame(animationLoop);
+        });
+
+        fig.open();
+
+        var geom = datGui.addFolder('Geometry');
+        geom.add(figure.geometry.parameters, 'slices', 1, 50).onChange((newSlices) => {
+            options.geometry.slices = parseInt(newSlices);
+            createFigure();
+            requestAnimationFrame(animationLoop);
+        });
+        geom.add(figure.geometry.parameters, 'stacks', 1, 50).onChange((newStacks) => {
+            options.geometry.stacks = parseInt(newStacks);
+            createFigure();
+            requestAnimationFrame(animationLoop);
+        });
+        geom.open();
     }
 
     function createRenderer() {
@@ -121,6 +166,8 @@ export const DrawPlot = (containerId) => {
         container.appendChild(renderer.domElement);
     }
 
+
+
     function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
@@ -128,7 +175,7 @@ export const DrawPlot = (containerId) => {
     }
 
     function animationLoop() {
-        //requestAnimationFrame(animate);
+        //requestAnimationFrame(animationLoop);
         update();
         render();
         controls.update();
