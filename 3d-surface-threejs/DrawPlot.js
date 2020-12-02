@@ -5,8 +5,6 @@ import Dat from './jsm/libs/dat.gui.module.js';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 
-import { ParametricGeometries } from './jsm/geometries/ParametricGeometries.js';
-
 
 // target: THREE.Vector3
 const KleinFigure = (v, u, target) => {
@@ -39,12 +37,17 @@ export const DrawPlot = (containerId) => {
         datGui;
 
     let options = {
-        isWireframe: true,
-        isAnimation: true,
+        isWireframe: false,
+        isAnimation: false,
         geometry: {
-            slices: 15,
-            stacks: 15
-        }
+            slices: 30,
+            stacks: 30
+        },
+        pointLightPos: {
+            phi: Math.PI,
+            radius: 200
+        },
+        testVal: 0
     }
 
     init();
@@ -53,6 +56,7 @@ export const DrawPlot = (containerId) => {
     function init() {
 
         createScene();
+        createLight();
         createCamera();
         createFigure();
         createGui();
@@ -60,12 +64,16 @@ export const DrawPlot = (containerId) => {
 
         // Add controls
         controls = new OrbitControls(camera, renderer.domElement);
+        controls.keys = { LEFT: 0, RIGHT: 0, UP: 0, BOTTOM: 0 }
 
         // Add statistics of FPS and Ping
         stats = new Stats();
         container.appendChild(stats.dom);
 
         window.addEventListener('resize', onWindowResize, false);
+        window.addEventListener('keydown', onWindowKeyDown, false);
+
+        setTimeout(enableAnimation, 10, options.isAnimation);
     }
 
     function createScene() {
@@ -73,18 +81,55 @@ export const DrawPlot = (containerId) => {
 
         // Set the background color
         scene.background = new THREE.Color('black');
+    }
 
-        // Create Light
-        const ambientLight = new THREE.AmbientLight(0xcccccc, 0.4);
-        scene.add(ambientLight);
+    function createLight() {
+        const getCirclePos = (r, phi) => {
+            return {
+                x: r * Math.cos(phi),
+                y: r * Math.sin(phi)
+            }
+        }
+
+        const directLight = new THREE.DirectionalLight(0xffcccc, 1.0);
+        directLight.position.set(19, -267, -245);
+        directLight.name = "directLight";
+        removeObject(directLight);
+        scene.add(directLight);
+
+        //const directLightHelper = new THREE.DirectionalLightHelper(directLight, 100);
+        //directLightHelper.name = "directLightHelper";
+        //removeObject(directLightHelper);
+        //scene.add(directLightHelper);
+
+        {
+            const dir = new THREE.Vector3(-19, 267, 245);
+            //normalize the direction vector (convert to vector of length 1)
+            dir.normalize();
+
+            const origin = new THREE.Vector3(19, -267, -245);
+            const arrowHelper = new THREE.ArrowHelper(dir, origin, 200, 0xffff00, 50, 30);
+            scene.add(arrowHelper);
+        }
+
+        const pointLight = new THREE.PointLight(0xffffff, 3.0, 500);
+        //pointLight.position.set(14, 480, 150);
+        const pos = getCirclePos(options.pointLightPos.radius, options.pointLightPos.phi / 100);
+        pointLight.position.set(14 + pos.x, 480, pos.y);
+        pointLight.name = "pointLight";
+        removeObject(pointLight);
+        scene.add(pointLight);
+
+        const sphereSize = 5;
+        const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize, 0xfcd440);
+        pointLightHelper.name = "pointLightHelper"
+        removeObject(pointLightHelper)
+        scene.add(pointLightHelper);
     }
 
     function createCamera() {
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
         camera.position.y = 400;
-
-        const pointLight = new THREE.PointLight(0xffffff, 0.8);
-        camera.add(pointLight);
 
         scene.add(camera);
     }
@@ -94,30 +139,29 @@ export const DrawPlot = (containerId) => {
         map.wrapS = map.wrapT = THREE.RepeatWrapping;
         map.anisotropy = 4;
 
-        const material = new THREE.MeshPhongMaterial({ map: map, side: THREE.DoubleSide, wireframe: options.isWireframe });
-        //const material = new THREE.MeshBasicMaterial({ wireframeLinewidth: 1, wireframe: true });
+        const material = new THREE.MeshPhongMaterial({
+            map: map,
+            side: THREE.DoubleSide,
+            wireframe: options.isWireframe
+        });
 
-        const geometry = new THREE.ParametricBufferGeometry(KleinFigure, 
+        const geometry = new THREE.ParametricBufferGeometry(
+            KleinFigure, 
             options.geometry.slices,
-            options.geometry.stacks);
+            options.geometry.stacks
+        );
 
         figure = new THREE.Mesh(geometry, material);
         figure.position.set(0, 100, 200);
         figure.scale.multiplyScalar(20);
         figure.name = 'Klein'
 
-        const removeObjectIfExist = (objName) => {
-            const selectedObject = scene.getObjectByName(objName);
-            if (selectedObject) {
-                scene.remove(selectedObject);
-            }
-        }
-
-        removeObjectIfExist(figure.name);
+        removeObject(figure);
         scene.add(figure);
     }
 
     function createGui() {
+
         datGui = new Dat.GUI({ autoPlace: true });
         datGui.domElement.id = 'gui';
 
@@ -130,14 +174,7 @@ export const DrawPlot = (containerId) => {
         });
 
         fig.add(options, 'isAnimation').onChange((isAnimation) => {
-            if (isAnimation) {
-                renderer.setAnimationLoop(animationLoop);
-                controls.removeEventListener('change', null);
-            } else {
-                renderer.setAnimationLoop(null);
-                controls.addEventListener('change', render);
-            }
-            requestAnimationFrame(animationLoop);
+            enableAnimation(isAnimation)
         });
 
         fig.open();
@@ -152,6 +189,14 @@ export const DrawPlot = (containerId) => {
             options.geometry.stacks = parseInt(newStacks);
             createFigure();
             requestAnimationFrame(animationLoop);
+        });
+        geom.add(options, 'testVal', -1000, 1000).onChange((newtestVal) => {
+            options.testVal = parseInt(newtestVal);
+            updateLight();
+        });
+        geom.add(options.pointLightPos, 'phi', 0, 200 * Math.PI).onChange((newPhi) => {
+            options.pointLightPos.phi = parseInt(newPhi);
+            updateLight();
         });
         geom.open();
     }
@@ -168,10 +213,51 @@ export const DrawPlot = (containerId) => {
 
 
 
+    function enableAnimation(isOn) {
+        if (isOn) {
+            renderer.setAnimationLoop(animationLoop);
+            controls.removeEventListener('change', null);
+        } else {
+            renderer.setAnimationLoop(null);
+            controls.addEventListener('change', render);
+        }
+        requestAnimationFrame(animationLoop);
+    }
+
+    function updateLight() {
+        createLight();
+        render();
+    }
+
+    function removeObject(obj) {
+        const selectedObject = scene.getObjectByName(obj.name);
+        if (selectedObject) {
+            scene.remove(selectedObject);
+        }
+    }
+
     function onWindowResize() {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
+    }
+
+    function onWindowKeyDown(event) {
+        const keyCode = event.keyCode;
+        let phiStep = 0;
+
+        if (keyCode === 37) {
+            phiStep = -10;
+        } else if (keyCode === 38) {
+            phiStep = 10;
+        } else if (keyCode === 39) {
+            phiStep = 10;
+        } else if (keyCode === 40) {
+            phiStep = -10;
+        }
+
+        options.pointLightPos.phi += phiStep;
+        updateLight();
     }
 
     function animationLoop() {
