@@ -5,6 +5,67 @@ import Dat from './jsm/libs/dat.gui.module.js';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 
+function mipmap( size, color ) {
+
+    const imageCanvas = document.createElement( "canvas" );
+    const context = imageCanvas.getContext( "2d" );
+
+    imageCanvas.width = imageCanvas.height = size;
+
+    context.fillStyle = "#444";
+    context.fillRect( 0, 0, size, size );
+
+    context.fillStyle = color;
+    context.fillRect( 0, 0, size / 2, size / 2 );
+    context.fillRect( size / 2, size / 2, size / 2, size / 2 );
+    return imageCanvas;
+
+}
+
+const loadTexturesWithMipMaps = async () =>
+{
+    const path = '/mips/sized/name.png';
+    const maxLevel = 10;
+    let mipmaps = new Array(maxLevel);
+
+    const loadTextureAsync = async url => {
+        return new Promise(resolve => {
+            new THREE.TextureLoader()
+                .load(url, texture => { resolve(texture); });
+        });
+    };
+
+    // load mipmaps
+    const pendings = []; // Promise[]
+    for (let level = 0; level <= maxLevel; ++level) {
+        const url = path.replace('name', Math.pow(2, maxLevel - level));
+
+        const mipmapLevel = level;
+        pendings.push(loadTextureAsync(url)
+            .then(texture => {
+                mipmaps[mipmapLevel] = mipmapLevel === 0
+                    ? texture
+                    : texture.image;
+            })
+        )
+    }
+
+    await Promise.all(pendings);
+
+    const texture = mipmaps.shift();
+    texture.mipmaps = mipmaps;
+    texture.minFilter = THREE.LinearMipMapLinearFilter;
+    texture.magFilter = THREE.LinearFilter;
+    texture.mapping = THREE.UVMapping;
+    texture.generateMipmaps = false;
+    texture.needsUpdate = true;
+    texture.repeat.set(7, 7);
+    texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+
+    return texture;
+
+};
+
 
 // target: THREE.Vector3
 const KleinFigure = (v, u, target) => {
@@ -30,9 +91,10 @@ const KleinFigure = (v, u, target) => {
     target.set(x, y, z);
 };
 
-export const DrawPlot = (containerId) => {
+export const DrawPlot = containerId => {
 
-    let camera, scene, figure, renderer,
+    let container,
+        camera, scene, figure, renderer,
         stats, controls,
         datGui;
 
@@ -48,23 +110,23 @@ export const DrawPlot = (containerId) => {
             radius: 200
         },
         testVal: 0
-    }
+    };
 
-    init();
+    init().catch(console.error);
     //animationLoop();
 
-    function init() {
+    async function init() {
 
         createScene();
         createLight();
         createCamera();
-        createFigure();
+        await createFigure();
         createGui();
         createRenderer();
 
         // Add controls
         controls = new OrbitControls(camera, renderer.domElement);
-        controls.keys = { LEFT: 0, RIGHT: 0, UP: 0, BOTTOM: 0 }
+        controls.keys = {LEFT: 0, RIGHT: 0, UP: 0, BOTTOM: 0};
 
         // Add statistics of FPS and Ping
         stats = new Stats();
@@ -83,15 +145,16 @@ export const DrawPlot = (containerId) => {
         scene.background = new THREE.Color('black');
     }
 
-    function createLight() {
+    function createLight()
+    {
         const getCirclePos = (r, phi) => {
             return {
                 x: r * Math.cos(phi),
                 y: r * Math.sin(phi)
             }
-        }
+        };
 
-        const directLight = new THREE.DirectionalLight(0xffcccc, 1.0);
+        const directLight = new THREE.DirectionalLight(0xffcccc, 3.0);
         directLight.position.set(19, -267, -245);
         directLight.name = "directLight";
         removeObject(directLight);
@@ -113,7 +176,6 @@ export const DrawPlot = (containerId) => {
         }
 
         const pointLight = new THREE.PointLight(0xffffff, 3.0, 500);
-        //pointLight.position.set(14, 480, 150);
         const pos = getCirclePos(options.pointLightPos.radius, options.pointLightPos.phi / 100);
         pointLight.position.set(14 + pos.x, 480, pos.y);
         pointLight.name = "pointLight";
@@ -122,31 +184,30 @@ export const DrawPlot = (containerId) => {
 
         const sphereSize = 5;
         const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize, 0xfcd440);
-        pointLightHelper.name = "pointLightHelper"
-        removeObject(pointLightHelper)
+        pointLightHelper.name = "pointLightHelper";
+        removeObject(pointLightHelper);
         scene.add(pointLightHelper);
     }
 
-    function createCamera() {
+    function createCamera()
+    {
         camera = new THREE.PerspectiveCamera(45, window.innerWidth / window.innerHeight, 1, 4000);
         camera.position.y = 400;
 
         scene.add(camera);
     }
 
-    function createFigure() {
-        const map = new THREE.TextureLoader().load('index.png');
-        map.wrapS = map.wrapT = THREE.RepeatWrapping;
-        map.anisotropy = 4;
+    async function createFigure() {
 
+        const texture = await loadTexturesWithMipMaps();
         const material = new THREE.MeshPhongMaterial({
-            map: map,
+            map: texture,
             side: THREE.DoubleSide,
             wireframe: options.isWireframe
         });
 
         const geometry = new THREE.ParametricBufferGeometry(
-            KleinFigure, 
+            KleinFigure,
             options.geometry.slices,
             options.geometry.stacks
         );
@@ -154,7 +215,7 @@ export const DrawPlot = (containerId) => {
         figure = new THREE.Mesh(geometry, material);
         figure.position.set(0, 100, 200);
         figure.scale.multiplyScalar(20);
-        figure.name = 'Klein'
+        figure.name = 'Klein';
 
         removeObject(figure);
         scene.add(figure);
@@ -169,7 +230,7 @@ export const DrawPlot = (containerId) => {
         const fig = datGui.addFolder('Figure');
 
         fig.add(options, 'isWireframe').onChange((newVal) => {
-            figure.material.wireframe = newVal
+            figure.material.wireframe = newVal;
             requestAnimationFrame(animationLoop);
         });
 
@@ -207,7 +268,7 @@ export const DrawPlot = (containerId) => {
         renderer.setSize(window.innerWidth, window.innerHeight);
         renderer.setAnimationLoop(animationLoop);
 
-        const container = document.getElementById(containerId);
+        container = document.getElementById(containerId);
         container.appendChild(renderer.domElement);
     }
 
