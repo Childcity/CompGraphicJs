@@ -5,6 +5,10 @@ import Dat from './jsm/libs/dat.gui.module.js';
 
 import { OrbitControls } from './jsm/controls/OrbitControls.js';
 
+const sin = arg => Math.sin(arg);
+const cos = arg => Math.cos(arg);
+const pow = (arg1, arg2) => Math.pow(arg1, arg2);
+
 function mipmap( size, color ) {
 
     const imageCanvas = document.createElement( "canvas" );
@@ -68,27 +72,51 @@ const loadTexturesWithMipMaps = async () =>
 
 
 // target: THREE.Vector3
-const KleinFigure = (v, u, target) => {
-
+const KleinFigure = (v, u, target) =>
+{
     u *= 2 * Math.PI;
     v *= 2 * Math.PI;
 
     let x, y, z;
     if (u < Math.PI) {
-
-        x = 3 * Math.cos(u) * (1 + Math.sin(u)) + (2 * (1 - Math.cos(u) / 2)) * Math.cos(u) * Math.cos(v);
-        z = - 8 * Math.sin(u) - 2 * (1 - Math.cos(u) / 2) * Math.sin(u) * Math.cos(v);
-
+        x = 3 * cos(u) * (1 + sin(u)) + (2 * (1 - cos(u) / 2)) * cos(u) * cos(v);
+        z = -8 * sin(u) - 2 * (1 - cos(u) / 2) * sin(u) * cos(v);
     } else {
-
-        x = 3 * Math.cos(u) * (1 + Math.sin(u)) + (2 * (1 - Math.cos(u) / 2)) * Math.cos(v + Math.PI);
-        z = - 8 * Math.sin(u);
-
+        x = 3 * cos(u) * (1 + sin(u)) + (2 * (1 - cos(u) / 2)) * cos(v + Math.PI);
+        z = -8 * sin(u);
     }
 
-    y = - 2 * (1 - Math.cos(u) / 2) * Math.sin(v);
+    y = -2 * (1 - cos(u) / 2) * sin(v);
 
     target.set(x, y, z);
+};
+
+// tangentsU, tangentsV: THREE.Vector3
+const KleinFigureDerivetive = (v, u, tangentsU, tangentsV) =>
+{
+    u *= 2 * Math.PI;
+    v *= 2 * Math.PI;
+
+    let dxdu, dydu, dzdu,
+        dxdv, dydv, dzdv;
+
+    if (u < Math.PI) {
+        dxdu = 2 * sin(u) * cos(u) * cos(v) - sin(u) * (3 * sin(u) + 2 * cos(v) + 3) + 3 * pow(cos(u), 2);
+        dxdv = (cos(u) - 2) * cos(u) * sin(v);
+        dzdu = pow(cos(u), 2) * cos(v) - 2 * cos(u) * (cos(v) + 4) - pow(sin(u), 2) * cos(v);
+        dzdv = sin(u) * (-(cos(u) - 2)) * sin(v);
+    } else {
+        dxdu = sin(u) * (cos(v + Math.PI) - 3 * (sin(u) + 1)) + 3 * pow(cos(u), 2);
+        dxdv = (cos(u) - 2) * sin(v + Math.PI);
+        dzdu = -v * cos(u);
+        dzdv = 0;
+    }
+
+    dydu = -sin(u) * sin(v);
+    dydv = (cos(u) - 2) * cos(v);
+
+    tangentsU.set(dxdu, dydu, dzdu);
+    tangentsV.set(dxdv, dydv, dzdv);
 };
 
 export const DrawPlot = containerId => {
@@ -106,14 +134,40 @@ export const DrawPlot = containerId => {
             stacks: 30
         },
         pointLightPos: {
-            phi: Math.PI,
+            phi: 200 * Math.PI,
             radius: 200
         },
-        testVal: 0
+        testVal: 314
     };
 
     init().catch(console.error);
     //animationLoop();
+
+    function createTangentsVector()
+    {
+        console.log(options.testVal/100);
+
+        let tangentsU = new THREE.Vector3();
+        let tangentsV = new THREE.Vector3();
+        KleinFigureDerivetive(Math.PI, options.testVal/100, tangentsU, tangentsV);
+
+        addArray(tangentsU, "tangentsU", 200, 0xffff00)
+        addArray(tangentsV, "tangentsV", 200, 0xff00ff)
+
+        function addArray(vec, objName, length, color)
+        {
+            const dir = vec.clone();
+            //normalize the direction vector (convert to vector of length 1)
+            dir.normalize();
+
+            const origin = dir.clone().negate();
+            const tangentsArrow = new THREE.ArrowHelper(dir, origin, length, color, 50, 30);
+            tangentsArrow.name = objName;
+            removeObject(tangentsArrow);
+            scene.add(tangentsArrow);
+        }
+
+    }
 
     async function init() {
 
@@ -121,6 +175,7 @@ export const DrawPlot = containerId => {
         createLight();
         createCamera();
         await createFigure();
+        createTangentsVector();
         createGui();
         createRenderer();
 
@@ -149,8 +204,8 @@ export const DrawPlot = containerId => {
     {
         const getCirclePos = (r, phi) => {
             return {
-                x: r * Math.cos(phi),
-                y: r * Math.sin(phi)
+                x: r * cos(phi),
+                y: r * sin(phi)
             }
         };
 
@@ -165,15 +220,15 @@ export const DrawPlot = containerId => {
         //removeObject(directLightHelper);
         //scene.add(directLightHelper);
 
-        {
-            const dir = new THREE.Vector3(-19, 267, 245);
-            //normalize the direction vector (convert to vector of length 1)
-            dir.normalize();
+        //{
+        //    const dir = new THREE.Vector3(-19, 267, 245);
+        //    //normalize the direction vector (convert to vector of length 1)
+        //    dir.normalize();
 
-            const origin = new THREE.Vector3(19, -267, -245);
-            const arrowHelper = new THREE.ArrowHelper(dir, origin, 200, 0xffff00, 50, 30);
-            scene.add(arrowHelper);
-        }
+        //    const origin = new THREE.Vector3(19, -267, -245);
+        //    const arrowHelper = new THREE.ArrowHelper(dir, origin, 200, 0xffff00, 50, 30);
+        //    scene.add(arrowHelper);
+        //}
 
         const pointLight = new THREE.PointLight(0xffffff, 3.0, 500);
         const pos = getCirclePos(options.pointLightPos.radius, options.pointLightPos.phi / 100);
@@ -182,11 +237,16 @@ export const DrawPlot = containerId => {
         removeObject(pointLight);
         scene.add(pointLight);
 
-        const sphereSize = 5;
-        const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize, 0xfcd440);
-        pointLightHelper.name = "pointLightHelper";
-        removeObject(pointLightHelper);
-        scene.add(pointLightHelper);
+        //const sphereSize = 5;
+        //const pointLightHelper = new THREE.PointLightHelper(pointLight, sphereSize, 0xfcd440);
+        //pointLightHelper.name = "pointLightHelper";
+        //removeObject(pointLightHelper);
+        //scene.add(pointLightHelper);
+
+        const ambientLight = new THREE.AmbientLight(0xffcccc, 0.5);
+        ambientLight.name = "ambientLight";
+        removeObject(ambientLight);
+        scene.add(ambientLight);
     }
 
     function createCamera()
@@ -213,8 +273,8 @@ export const DrawPlot = containerId => {
         );
 
         figure = new THREE.Mesh(geometry, material);
-        figure.position.set(0, 100, 200);
-        figure.scale.multiplyScalar(20);
+        figure.position.set(0, 0, 0);
+        figure.scale.multiplyScalar(1);
         figure.name = 'Klein';
 
         removeObject(figure);
@@ -240,22 +300,23 @@ export const DrawPlot = containerId => {
 
         fig.open();
 
-        var geom = datGui.addFolder('Geometry');
-        geom.add(figure.geometry.parameters, 'slices', 1, 50).onChange((newSlices) => {
+        const geom = datGui.addFolder('Geometry');
+        geom.add(figure.geometry.parameters, 'slices', 1, 50).onChange(async (newSlices) => {
             options.geometry.slices = parseInt(newSlices);
-            createFigure();
+            await createFigure();
             requestAnimationFrame(animationLoop);
         });
-        geom.add(figure.geometry.parameters, 'stacks', 1, 50).onChange((newStacks) => {
+        geom.add(figure.geometry.parameters, 'stacks', 1, 50).onChange(async (newStacks) => {
             options.geometry.stacks = parseInt(newStacks);
-            createFigure();
+            await createFigure();
             requestAnimationFrame(animationLoop);
         });
-        geom.add(options, 'testVal', -1000, 1000).onChange((newtestVal) => {
+        geom.add(options, 'testVal', 0, 628).onChange((newtestVal) => {
             options.testVal = parseInt(newtestVal);
-            updateLight();
+            createTangentsVector();
+            requestAnimationFrame(animationLoop);
         });
-        geom.add(options.pointLightPos, 'phi', 0, 200 * Math.PI).onChange((newPhi) => {
+        geom.add(options.pointLightPos, 'phi', 0, 200 * Math.PI).onChange(newPhi => {
             options.pointLightPos.phi = parseInt(newPhi);
             updateLight();
         });
@@ -323,7 +384,7 @@ export const DrawPlot = containerId => {
 
     function animationLoop() {
         //requestAnimationFrame(animationLoop);
-        update();
+        //update();
         render();
         controls.update();
         stats.update();
@@ -332,8 +393,8 @@ export const DrawPlot = containerId => {
     function update() {
         const timer = Date.now() * 0.0001;
 
-        camera.position.x = Math.cos(timer) * 1000;
-        camera.position.z = Math.sin(timer) * 1000;
+        camera.position.x = cos(timer) * 1000;
+        camera.position.z = sin(timer) * 1000;
 
         camera.lookAt(scene.position);
 
