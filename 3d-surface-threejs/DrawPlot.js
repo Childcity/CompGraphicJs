@@ -147,20 +147,28 @@ export const DrawPlot = containerId => {
     {
         console.log(options.testVal/100);
 
+        const v = 0.2;
+        const u = options.testVal / 100;
+
+        let startPoint = new THREE.Vector3();
         let tangentsU = new THREE.Vector3();
         let tangentsV = new THREE.Vector3();
-        KleinFigureDerivetive(Math.PI, options.testVal/100, tangentsU, tangentsV);
 
-        addArray(tangentsU, "tangentsU", 200, 0xffff00)
-        addArray(tangentsV, "tangentsV", 200, 0xff00ff)
+        KleinFigure(v, u, startPoint);
+        KleinFigureDerivetive(v, u, tangentsU, tangentsV);
 
-        function addArray(vec, objName, length, color)
+        addArray(startPoint, tangentsU, "tangentsU", 200, 0xffff00)
+        addArray(startPoint, tangentsV, "tangentsV", 200, 0xff00ff)
+
+        function addArray(start, end, objName, length, color)
         {
-            const dir = vec.clone();
+            const dir = end.clone();
             //normalize the direction vector (convert to vector of length 1)
             dir.normalize();
 
-            const origin = dir.clone().negate();
+            const origin = start.clone();
+            origin.normalize();
+
             const tangentsArrow = new THREE.ArrowHelper(dir, origin, length, color, 50, 30);
             tangentsArrow.name = objName;
             removeObject(tangentsArrow);
