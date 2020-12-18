@@ -72,11 +72,17 @@ const loadTexturesWithMipMaps = async () =>
 
 
 // target: THREE.Vector3
-const KleinFigure = (v, u, target) =>
+const KleinFigureGeometry = (v, u, target) =>
 {
     u *= 2 * Math.PI;
     v *= 2 * Math.PI;
 
+    return KleinFigure(v, u, target);
+};
+
+// target: THREE.Vector3
+const KleinFigure = (v, u, target) =>
+{
     let x, y, z;
     if (u < Math.PI) {
         x = 3 * cos(u) * (1 + sin(u)) + (2 * (1 - cos(u) / 2)) * cos(u) * cos(v);
@@ -88,15 +94,12 @@ const KleinFigure = (v, u, target) =>
 
     y = -2 * (1 - cos(u) / 2) * sin(v);
 
-    target.set(x, y, z);
+    return target.set(x, y, z);
 };
 
 // tangentsU, tangentsV: THREE.Vector3
-const KleinFigureDerivetive = (v, u, tangentsU, tangentsV) =>
+const KleinFigureDerivetive = (v, u) =>
 {
-    u *= 2 * Math.PI;
-    v *= 2 * Math.PI;
-
     let dxdu, dydu, dzdu,
         dxdv, dydv, dzdv;
 
@@ -115,8 +118,10 @@ const KleinFigureDerivetive = (v, u, tangentsU, tangentsV) =>
     dydu = -sin(u) * sin(v);
     dydv = (cos(u) - 2) * cos(v);
 
-    tangentsU.set(dxdu, dydu, dzdu);
-    tangentsV.set(dxdv, dydv, dzdv);
+    return {
+        tangentsV: new THREE.Vector3(dxdv, dydv, dzdv),
+        tangentsU: new THREE.Vector3(dxdu, dydu, dzdu)
+    }
 };
 
 export const DrawPlot = containerId => {
@@ -126,7 +131,7 @@ export const DrawPlot = containerId => {
         stats, controls,
         datGui;
 
-    let options = {
+    const options = {
         isWireframe: false,
         isAnimation: false,
         geometry: {
@@ -134,42 +139,43 @@ export const DrawPlot = containerId => {
             stacks: 30
         },
         pointLightPos: {
-            phi: 200 * Math.PI,
+            phi: 600,
             radius: 200
         },
-        testVal: 314
+        tangentsPoint: {
+            moveByV: 400,
+            moveByU: 306
+        }
     };
 
     init().catch(console.error);
     //animationLoop();
 
-    function createTangentsVector()
+    function createTangentsVectors()
     {
-        console.log(options.testVal/100);
+        const v = options.tangentsPoint.moveByV / 100;
+        const u = options.tangentsPoint.moveByU / 100;
+        const scalar = 5;
 
-        const v = 0.2;
-        const u = options.testVal / 100;
+        const startPoint = KleinFigure(v, u, new THREE.Vector3());
+        const {tangentsV, tangentsU} = KleinFigureDerivetive(v, u);
+        const normalUV = new THREE.Vector3().crossVectors(tangentsV, tangentsU);
 
-        let startPoint = new THREE.Vector3();
-        let tangentsU = new THREE.Vector3();
-        let tangentsV = new THREE.Vector3();
+        addArray(startPoint, tangentsU, "tangentsU", scalar, 0xffff00)
+        addArray(startPoint, tangentsV, "tangentsV", scalar, 0xff00ff)
+        addArray(startPoint, normalUV, "normalUV", scalar, 0x00ffff)
 
-        KleinFigure(v, u, startPoint);
-        KleinFigureDerivetive(v, u, tangentsU, tangentsV);
-
-        addArray(startPoint, tangentsU, "tangentsU", 200, 0xffff00)
-        addArray(startPoint, tangentsV, "tangentsV", 200, 0xff00ff)
-
-        function addArray(start, end, objName, length, color)
+        function addArray(start, end, objName, scalar, color)
         {
-            const dir = end.clone();
-            //normalize the direction vector (convert to vector of length 1)
+            end.multiplyScalar(scalar);
+
+            const origin = start;
+            const dir = end.sub(origin);
+
             dir.normalize();
+            const length = dir.length() * scalar;
 
-            const origin = start.clone();
-            origin.normalize();
-
-            const tangentsArrow = new THREE.ArrowHelper(dir, origin, length, color, 50, 30);
+            const tangentsArrow = new THREE.ArrowHelper(dir, origin, length, color);
             tangentsArrow.name = objName;
             removeObject(tangentsArrow);
             scene.add(tangentsArrow);
@@ -183,7 +189,7 @@ export const DrawPlot = containerId => {
         createLight();
         createCamera();
         await createFigure();
-        createTangentsVector();
+        createTangentsVectors();
         createGui();
         createRenderer();
 
@@ -265,8 +271,8 @@ export const DrawPlot = containerId => {
         scene.add(camera);
     }
 
-    async function createFigure() {
-
+    async function createFigure()
+    {
         const texture = await loadTexturesWithMipMaps();
         const material = new THREE.MeshPhongMaterial({
             map: texture,
@@ -275,7 +281,7 @@ export const DrawPlot = containerId => {
         });
 
         const geometry = new THREE.ParametricBufferGeometry(
-            KleinFigure,
+            KleinFigureGeometry,
             options.geometry.slices,
             options.geometry.stacks
         );
@@ -289,8 +295,8 @@ export const DrawPlot = containerId => {
         scene.add(figure);
     }
 
-    function createGui() {
-
+    function createGui()
+    {
         datGui = new Dat.GUI({ autoPlace: true });
         datGui.domElement.id = 'gui';
 
@@ -319,19 +325,25 @@ export const DrawPlot = containerId => {
             await createFigure();
             requestAnimationFrame(animationLoop);
         });
-        geom.add(options, 'testVal', 0, 628).onChange((newtestVal) => {
-            options.testVal = parseInt(newtestVal);
-            createTangentsVector();
-            requestAnimationFrame(animationLoop);
-        });
         geom.add(options.pointLightPos, 'phi', 0, 200 * Math.PI).onChange(newPhi => {
             options.pointLightPos.phi = parseInt(newPhi);
             updateLight();
         });
+        geom.add(options.tangentsPoint, 'moveByV', 0, 628).onChange((newVal) => {
+            options.moveByU = parseInt(newVal);
+            createTangentsVectors();
+            requestAnimationFrame(animationLoop);
+        });
+        geom.add(options.tangentsPoint, 'moveByU', 0, 628).onChange((newVal) => {
+            options.moveByU = parseInt(newVal);
+            createTangentsVectors();
+            requestAnimationFrame(animationLoop);
+        });
         geom.open();
     }
 
-    function createRenderer() {
+    function createRenderer()
+    {
         renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setPixelRatio(window.devicePixelRatio);
         renderer.setSize(window.innerWidth, window.innerHeight);
@@ -343,7 +355,8 @@ export const DrawPlot = containerId => {
 
 
 
-    function enableAnimation(isOn) {
+    function enableAnimation(isOn)
+    {
         if (isOn) {
             renderer.setAnimationLoop(animationLoop);
             controls.removeEventListener('change', null);
@@ -354,25 +367,29 @@ export const DrawPlot = containerId => {
         requestAnimationFrame(animationLoop);
     }
 
-    function updateLight() {
+    function updateLight()
+    {
         createLight();
         render();
     }
 
-    function removeObject(obj) {
+    function removeObject(obj)
+    {
         const selectedObject = scene.getObjectByName(obj.name);
         if (selectedObject) {
             scene.remove(selectedObject);
         }
     }
 
-    function onWindowResize() {
+    function onWindowResize()
+    {
         camera.aspect = window.innerWidth / window.innerHeight;
         camera.updateProjectionMatrix();
         renderer.setSize(window.innerWidth, window.innerHeight);
     }
 
-    function onWindowKeyDown(event) {
+    function onWindowKeyDown(event)
+    {
         const keyCode = event.keyCode;
         let phiStep = 0;
 
@@ -390,7 +407,8 @@ export const DrawPlot = containerId => {
         updateLight();
     }
 
-    function animationLoop() {
+    function animationLoop()
+    {
         //requestAnimationFrame(animationLoop);
         //update();
         render();
@@ -398,7 +416,8 @@ export const DrawPlot = containerId => {
         stats.update();
     }
 
-    function update() {
+    function update()
+    {
         const timer = Date.now() * 0.0001;
 
         camera.position.x = cos(timer) * 1000;
@@ -414,7 +433,8 @@ export const DrawPlot = containerId => {
         });
     }
 
-    function render() {
+    function render()
+    {
         renderer.render(scene, camera);
     }
 };
