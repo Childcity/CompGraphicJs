@@ -161,9 +161,9 @@ export const DrawPlot = containerId => {
         const {tangentsV, tangentsU} = KleinFigureDerivetive(v, u);
         const normalUV = new THREE.Vector3().crossVectors(tangentsV, tangentsU);
 
-        addArray(startPoint, tangentsU, "tangentsU", scalar, 0xffff00)
-        addArray(startPoint, tangentsV, "tangentsV", scalar, 0xff00ff)
-        addArray(startPoint, normalUV, "normalUV", scalar, 0x00ffff)
+        addArray(startPoint, tangentsU, "tangentsU", scalar, 0xffff00);
+        addArray(startPoint, tangentsV, "tangentsV", scalar, 0xff00ff);
+        addArray(startPoint, normalUV, "normalUV", scalar, 0x00ffff);
 
         function addArray(start, end, objName, scalar, color)
         {
@@ -392,6 +392,8 @@ export const DrawPlot = containerId => {
     {
         const keyCode = event.keyCode;
         let phiStep = 0;
+        let vStep = 0;
+        let uStep = 0;
 
         if (keyCode === 37) {
             phiStep = -10;
@@ -401,9 +403,22 @@ export const DrawPlot = containerId => {
             phiStep = 10;
         } else if (keyCode === 40) {
             phiStep = -10;
+
+        } else if (keyCode === 87) { // W
+            uStep = -10;
+        } else if (keyCode === 83) { // A
+            uStep = 10;
+        } else if (keyCode === 65) {
+            vStep = 10;
+        } else if (keyCode === 68) {
+            vStep = -10;
         }
 
         options.pointLightPos.phi += phiStep;
+        options.tangentsPoint.moveByV += vStep;
+        options.tangentsPoint.moveByU += uStep;
+
+        createTangentsVectors();
         updateLight();
     }
 
